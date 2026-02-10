@@ -1,23 +1,231 @@
-.container {
-  padding: 0 2rem;
-  height: 100vh;
-  margin: 0 auto;
+.page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  background: radial-gradient(circle at 20% 10%, #2f1d69, #0b0d1b 55%, #06070f);
+  color: #eff4ff;
+}
+
+.appShell {
+  width: min(100%, 430px);
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  align-items: center;
+  gap: 14px;
+  padding-bottom: 40px;
 }
 
-.h1 {
-  text-align: center;
-  font-size: 4rem;
+.header h1 {
+  margin: 4px 0;
+  font-size: 2rem;
+  letter-spacing: 0.02em;
+}
+
+.header p {
+  margin: 0;
+  color: #c8d1ef;
+  line-height: 1.45;
+}
+
+.kicker {
+  margin: 0;
+  color: #8ef4ff;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.73rem;
+  font-weight: 700;
+}
+
+.card {
+  background: linear-gradient(145deg, #131a31, #17112c);
+  border: 1px solid rgba(191, 205, 255, 0.18);
+  border-radius: 18px;
+  padding: 14px;
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.35);
+}
+
+.card h2 {
+  margin: 0 0 8px;
+  font-size: 1.1rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rowTwo,
+.rowThree {
+  display: grid;
+  gap: 8px;
+}
+
+.rowTwo {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rowThree {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.8rem;
+  color: #bdd0ff;
+}
+
+.form input {
+  border-radius: 10px;
+  border: 1px solid rgba(218, 229, 255, 0.2);
+  padding: 8px;
+  background: rgba(6, 10, 26, 0.8);
+  color: #eff4ff;
+}
+
+.actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.unitToggle {
+  display: flex;
+  gap: 6px;
+}
+
+.unitToggle button {
+  border: 1px solid rgba(191, 205, 255, 0.4);
+  background: transparent;
+  color: #dbe5ff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 700;
+}
+
+.unitActive {
+  background: rgba(121, 243, 255, 0.22) !important;
+  border-color: #79f3ff !important;
+}
+
+.primaryButton {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 13px;
+  font-weight: 700;
+  color: #081124;
+  background: linear-gradient(120deg, #79f3ff, #6effc4);
+}
+
+.helpText {
+  margin: 0 0 8px;
+  color: #b7c1e3;
+  font-size: 0.86rem;
+}
+
+.helpText code {
+  color: #96ffe6;
+}
+
+.input {
+  width: 100%;
+  min-height: 180px;
+  border-radius: 12px;
+  border: 1px solid rgba(218, 229, 255, 0.2);
+  padding: 10px;
+  background: rgba(6, 10, 26, 0.8);
+  color: #eff4ff;
+  font-size: 0.93rem;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.caption {
+  margin: 8px 0 0;
+  font-size: 0.85rem;
+  color: #9cb2ff;
+}
+
+.list {
+  list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
 }
 
-.highlight {
-  color: #01e7bf;
-  text-decoration: none;
-  border-bottom: 1px solid #01e7bf;
-  transition: all 0.2s ease-in-out;
+.listItem {
+  border: 1px solid rgba(198, 206, 255, 0.15);
+  border-radius: 12px;
+  padding: 10px;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.listItem h3 {
+  margin: 0 0 4px;
+  font-size: 0.95rem;
+}
+
+.listItem p {
+  margin: 0;
+  color: #c2cced;
+  font-size: 0.84rem;
+}
+
+.up {
+  color: #65ffbd !important;
+  font-weight: 700;
+}
+
+.down {
+  color: #ff9da6 !important;
+  font-weight: 700;
+}
+
+.badge {
+  color: #0a0f21 !important;
+  background: linear-gradient(120deg, #79f3ff, #6effc4);
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sourceNote {
+  margin: 0 0 8px;
+  color: #9fb2e8;
+  font-size: 0.78rem;
+}
+
+.sourceNote a {
+  color: #96ffe6;
+}
+
+.badgeWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.tier {
+  margin: 0;
+  font-size: 0.72rem !important;
+  color: #9be7ff !important;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.empty {
+  margin: 0;
+  color: #b3bde0;
 }
