@@ -22,6 +22,7 @@ type ExerciseSummary = {
   percentile: number;
   topPercent: number;
   referenceMedian1RM: number;
+  percentileLabel: string;
 };
 
 type PercentilePoint = {
@@ -115,6 +116,20 @@ const strengthPercentilesByExercise: Record<string, PercentilePoint[]> = {
   ],
 };
 
+
+const percentileSource = {
+  label: "Strength standard references",
+  note: "Approximate percentile anchors derived from public lifting-standard datasets (e.g. StrengthLevel-style aggregates) and linearly interpolated in-app.",
+  href: "https://strengthlevel.com/strength-standards",
+};
+
+const getPercentileLabel = (percentile: number) => {
+  if (percentile >= 99) return "Elite";
+  if (percentile >= 93) return "Advanced";
+  if (percentile >= 75) return "Intermediate";
+  if (percentile >= 40) return "Novice";
+  return "Starter";
+};
 const parseWorkoutText = (text: string): WorkoutSet[] => {
   const lines = text
     .split("\n")
@@ -270,6 +285,7 @@ const Home: NextPage = () => {
           percentile,
           topPercent: 100 - percentile,
           referenceMedian1RM: medianRef,
+          percentileLabel: getPercentileLabel(percentile),
         };
       })
       .sort((a, b) => b.percentile - a.percentile);
@@ -451,6 +467,12 @@ const Home: NextPage = () => {
           <p className={styles.helpText}>
             Percentiles are estimated from real-world lifting-standard style distributions, then interpolated.
           </p>
+          <p className={styles.sourceNote}>
+            {percentileSource.note}{" "}
+            <a href={percentileSource.href} target="_blank" rel="noreferrer">
+              View source reference
+            </a>
+          </p>
           {summaries.length === 0 ? (
             <p className={styles.empty}>Add at least one lift to view rankings.</p>
           ) : (
@@ -461,7 +483,10 @@ const Home: NextPage = () => {
                     <h3>{prettifyExercise(summary.exercise)}</h3>
                     <p>Median benchmark (60th): {summary.referenceMedian1RM.toFixed(1)} kg est. 1RM</p>
                   </div>
-                  <p className={styles.badge}>Top {summary.topPercent.toFixed(1)}%</p>
+                  <div className={styles.badgeWrap}>
+                    <p className={styles.badge}>Top {summary.topPercent.toFixed(1)}%</p>
+                    <p className={styles.tier}>{summary.percentileLabel}</p>
+                  </div>
                 </li>
               ))}
             </ul>

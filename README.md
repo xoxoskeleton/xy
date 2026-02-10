@@ -15,7 +15,7 @@ A phone-first strength tracker built with Next.js.
 ## Percentile notes
 
 Percentiles are estimates, not medical/performance certification.
-They are derived from publicly available lifting-standard style charts mapped to percentile buckets, then interpolated.
+They are derived from publicly available lifting-standard style charts (StrengthLevel-style aggregates) mapped to percentile buckets, then interpolated.
 
 ## Run locally
 
@@ -25,3 +25,10 @@ pnpm dev
 ```
 
 Open `http://localhost:3000`.
+
+
+## Deploy
+
+```bash
+vercel --prod
+```
