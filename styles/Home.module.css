@@ -49,6 +49,77 @@
   font-size: 1.1rem;
 }
 
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rowTwo,
+.rowThree {
+  display: grid;
+  gap: 8px;
+}
+
+.rowTwo {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.rowThree {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.8rem;
+  color: #bdd0ff;
+}
+
+.form input {
+  border-radius: 10px;
+  border: 1px solid rgba(218, 229, 255, 0.2);
+  padding: 8px;
+  background: rgba(6, 10, 26, 0.8);
+  color: #eff4ff;
+}
+
+.actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.unitToggle {
+  display: flex;
+  gap: 6px;
+}
+
+.unitToggle button {
+  border: 1px solid rgba(191, 205, 255, 0.4);
+  background: transparent;
+  color: #dbe5ff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 700;
+}
+
+.unitActive {
+  background: rgba(121, 243, 255, 0.22) !important;
+  border-color: #79f3ff !important;
+}
+
+.primaryButton {
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 13px;
+  font-weight: 700;
+  color: #081124;
+  background: linear-gradient(120deg, #79f3ff, #6effc4);
+}
+
 .helpText {
   margin: 0 0 8px;
   color: #b7c1e3;
