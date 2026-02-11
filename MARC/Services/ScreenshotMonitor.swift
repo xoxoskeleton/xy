@@ -8,11 +8,13 @@ final class ScreenshotMonitor: NSObject, ObservableObject, PHPhotoLibraryChangeO
     @Published var status: PHAuthorizationStatus = .notDetermined
 
     private var screenshotsFetchResult: PHFetchResult<PHAsset>?
-    private let memoryStore = MemoryStore()
     private weak var modelContext: ModelContext?
+    private weak var memoryStore: MemoryStore?
 
-    func start(context: ModelContext) async {
+    func start(context: ModelContext, store: MemoryStore) async {
         modelContext = context
+        memoryStore = store
+
         let newStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         status = newStatus
         guard newStatus == .authorized || newStatus == .limited else { return }
@@ -36,6 +38,11 @@ final class ScreenshotMonitor: NSObject, ObservableObject, PHPhotoLibraryChangeO
             screenshotsFetchResult = details.fetchResultAfterChanges
             let inserted = details.insertedObjects
             for asset in inserted where asset.mediaSubtypes.contains(.photoScreenshot) {
+                let identifier = asset.localIdentifier
+                let descriptor = FetchDescriptor<Memory>(predicate: #Predicate { $0.assetIdentifier == identifier })
+                let existing = (try? context.fetchCount(descriptor)) ?? 0
+                guard existing == 0 else { continue }
+
                 await ingest(asset: asset, context: context)
             }
         }
@@ -45,6 +52,11 @@ final class ScreenshotMonitor: NSObject, ObservableObject, PHPhotoLibraryChangeO
         let result = fetchScreenshots(lastDays: 7)
         for index in 0..<result.count {
             let asset = result.object(at: index)
+            let identifier = asset.localIdentifier
+            let descriptor = FetchDescriptor<Memory>(predicate: #Predicate { $0.assetIdentifier == identifier })
+            let existing = (try? context.fetchCount(descriptor)) ?? 0
+            guard existing == 0 else { continue }
+
             await ingest(asset: asset, context: context)
         }
     }
@@ -58,6 +70,8 @@ final class ScreenshotMonitor: NSObject, ObservableObject, PHPhotoLibraryChangeO
     }
 
     private func ingest(asset: PHAsset, context: ModelContext) async {
+        guard let memoryStore else { return }
+
         let manager = PHImageManager.default()
         let options = PHImageRequestOptions()
         options.deliveryMode = .highQualityFormat
@@ -70,6 +84,11 @@ final class ScreenshotMonitor: NSObject, ObservableObject, PHPhotoLibraryChangeO
         }
 
         guard let image else { return }
-        await memoryStore.importImage(image, createdAt: asset.creationDate ?? .now, context: context)
+        await memoryStore.importImage(
+            image,
+            createdAt: asset.creationDate ?? .now,
+            assetIdentifier: asset.localIdentifier,
+            context: context
+        )
     }
 }

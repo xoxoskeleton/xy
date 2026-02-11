@@ -4,6 +4,7 @@ import SwiftData
 @Model
 final class Memory {
     @Attribute(.unique) var id: UUID
+    @Attribute(.unique) var assetIdentifier: String = ""
     @Attribute(.externalStorage) var imageData: Data
     @Attribute(.externalStorage) var thumbnailData: Data
     var extractedText: String
@@ -18,6 +19,7 @@ final class Memory {
 
     init(
         id: UUID = UUID(),
+        assetIdentifier: String = "",
         imageData: Data,
         thumbnailData: Data,
         extractedText: String,
@@ -31,6 +33,7 @@ final class Memory {
         sourceApp: String? = nil
     ) {
         self.id = id
+        self.assetIdentifier = assetIdentifier
         self.imageData = imageData
         self.thumbnailData = thumbnailData
         self.extractedText = extractedText

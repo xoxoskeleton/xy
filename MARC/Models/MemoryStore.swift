@@ -1,5 +1,4 @@
 import Foundation
-import PhotosUI
 import SwiftData
 import UIKit
 
@@ -14,6 +13,7 @@ final class MemoryStore: ObservableObject {
     func importImage(
         _ image: UIImage,
         createdAt: Date = .now,
+        assetIdentifier: String = "",
         context: ModelContext
     ) async {
         isProcessingImport = true
@@ -32,10 +32,21 @@ final class MemoryStore: ObservableObject {
         let vector = embeddingService.generateEmbedding(for: text) ?? []
         let autoTagNames = autoTagger.tags(for: text)
 
-        let tags = autoTagNames.map { Tag(name: $0) }
-        tags.forEach { context.insert($0) }
+        let tags: [Tag] = autoTagNames.map { name in
+            let descriptor = FetchDescriptor<Tag>(predicate: #Predicate { $0.name == name })
+            if let existing = try? context.fetch(descriptor).first {
+                return existing
+            }
+
+            let newTag = Tag(name: name)
+            context.insert(newTag)
+            return newTag
+        }
+
+        let resolvedIdentifier = assetIdentifier.isEmpty ? "manual-\(UUID().uuidString)" : assetIdentifier
 
         let memory = Memory(
+            assetIdentifier: resolvedIdentifier,
             imageData: compressed,
             thumbnailData: thumbnail,
             extractedText: text,
@@ -45,7 +56,14 @@ final class MemoryStore: ObservableObject {
         )
 
         context.insert(memory)
-        try? context.save()
+
+        do {
+            try context.save()
+            let impact = UIImpactFeedbackGenerator(style: .medium)
+            impact.impactOccurred()
+        } catch {
+            context.delete(memory)
+        }
     }
 }
 

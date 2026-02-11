@@ -1,9 +1,12 @@
+import Photos
 import SwiftUI
 
 struct OnboardingView: View {
     let onFinish: () -> Void
     @State private var step = 0
+    @State private var isHandlingAction = false
 
+    private let reminderService = ReminderService()
     private let pages: [(title: String, body: String)] = [
         ("Welcome to MARC", "Screenshot it. MARC remembers it. Ask MARC anything."),
         ("Your memories stay yours", "Everything is local-first, private, and on-device."),
@@ -26,17 +29,36 @@ struct OnboardingView: View {
                 Spacer()
 
                 Button(step == pages.count - 1 ? "Start" : "Continue") {
-                    withAnimation(.spring) {
-                        if step == pages.count - 1 {
-                            onFinish()
-                        } else {
-                            step += 1
-                        }
-                    }
+                    handleTap()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(isHandlingAction)
             }
             .padding(28)
+        }
+    }
+
+    private func handleTap() {
+        Task {
+            isHandlingAction = true
+            defer { isHandlingAction = false }
+
+            switch step {
+            case 2:
+                _ = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+                withAnimation(.spring) { step += 1 }
+            case 3:
+                try? await reminderService.requestPermission()
+                withAnimation(.spring) { onFinish() }
+            default:
+                withAnimation(.spring) {
+                    if step == pages.count - 1 {
+                        onFinish()
+                    } else {
+                        step += 1
+                    }
+                }
+            }
         }
     }
 }
