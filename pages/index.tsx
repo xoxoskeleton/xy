@@ -1,500 +1,240 @@
-import type { NextPage } from "next";
-import Head from "next/head";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import styles from "../styles/Home.module.css";
+import Head from 'next/head'
+import { useEffect, useMemo, useState } from 'react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db, ensureDemoData, createChild } from '../lib/db'
+import { CardType, Rating } from '../lib/types'
+import { applyRating } from '../lib/srs'
+import { computeUnlockedStage, strongMasteredRatio, canUseWholeWordCard } from '../lib/gating'
+import { selectSessionCards } from '../lib/session'
+import { stageNames } from '../lib/content'
 
-type WorkoutSet = {
-  id: string;
-  date: string;
-  exercise: string;
-  weightKg: number;
-  reps: number;
-  sets: number;
-  est1RM: number;
-};
+const mascotMessage = {
+  idle: 'Ready to play a 5-minute reading game?',
+  fast: 'Brilliant blending! 🎉',
+  slow: 'Nice effort. We can go gently.',
+  missed: 'That is okay. Let’s try again soon.'
+}
 
-type ExerciseSummary = {
-  exercise: string;
-  firstEst1RM: number;
-  latestEst1RM: number;
-  deltaKg: number;
-  deltaPercent: number;
-  percentile: number;
-  topPercent: number;
-  referenceMedian1RM: number;
-  percentileLabel: string;
-};
+export default function Home() {
+  const [activeChildId, setActiveChildId] = useState<string>('')
+  const [mode, setMode] = useState<'dashboard' | 'session'>('dashboard')
+  const [cardIndex, setCardIndex] = useState(0)
+  const [flipped, setFlipped] = useState(false)
+  const [mascot, setMascot] = useState<keyof typeof mascotMessage>('idle')
+  const [celebrated, setCelebrated] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newAge, setNewAge] = useState(5)
+  const [customPrompt, setCustomPrompt] = useState('')
+  const [customStage, setCustomStage] = useState(1)
+  const [customType, setCustomType] = useState<CardType>('SoundCard')
+  const [customTricky, setCustomTricky] = useState(false)
 
-type PercentilePoint = {
-  percentile: number;
-  oneRmKg: number;
-};
-
-type QuickLogForm = {
-  date: string;
-  exercise: string;
-  weight: string;
-  reps: string;
-  sets: string;
-  unit: "kg" | "lb";
-};
-
-const STORAGE_KEY = "strength-pulse-log";
-
-const defaultLog = `2026-02-03
-Squat 3x5 @ 95kg
-Bench Press - 65kg x 8
-Deadlift: 120kg x 4
-
-2026-02-06
-Squat 3x5 @ 100kg
-Bench Press - 67.5kg x 8
-Deadlift: 125kg x 4`;
-
-// Approximate adult strength standards from publicly available aggregated lifting-standard charts,
-// normalized to estimated 1RM in kg and mapped to percentile buckets.
-const strengthPercentilesByExercise: Record<string, PercentilePoint[]> = {
-  squat: [
-    { percentile: 20, oneRmKg: 60 },
-    { percentile: 40, oneRmKg: 90 },
-    { percentile: 60, oneRmKg: 120 },
-    { percentile: 75, oneRmKg: 145 },
-    { percentile: 85, oneRmKg: 165 },
-    { percentile: 93, oneRmKg: 190 },
-    { percentile: 97, oneRmKg: 210 },
-    { percentile: 99, oneRmKg: 230 },
-  ],
-  "bench press": [
-    { percentile: 20, oneRmKg: 40 },
-    { percentile: 40, oneRmKg: 60 },
-    { percentile: 60, oneRmKg: 80 },
-    { percentile: 75, oneRmKg: 100 },
-    { percentile: 85, oneRmKg: 117.5 },
-    { percentile: 93, oneRmKg: 135 },
-    { percentile: 97, oneRmKg: 150 },
-    { percentile: 99, oneRmKg: 165 },
-  ],
-  deadlift: [
-    { percentile: 20, oneRmKg: 70 },
-    { percentile: 40, oneRmKg: 105 },
-    { percentile: 60, oneRmKg: 140 },
-    { percentile: 75, oneRmKg: 175 },
-    { percentile: 85, oneRmKg: 200 },
-    { percentile: 93, oneRmKg: 225 },
-    { percentile: 97, oneRmKg: 250 },
-    { percentile: 99, oneRmKg: 280 },
-  ],
-  "overhead press": [
-    { percentile: 20, oneRmKg: 25 },
-    { percentile: 40, oneRmKg: 37.5 },
-    { percentile: 60, oneRmKg: 50 },
-    { percentile: 75, oneRmKg: 62.5 },
-    { percentile: 85, oneRmKg: 72.5 },
-    { percentile: 93, oneRmKg: 82.5 },
-    { percentile: 97, oneRmKg: 92.5 },
-    { percentile: 99, oneRmKg: 105 },
-  ],
-  row: [
-    { percentile: 20, oneRmKg: 40 },
-    { percentile: 40, oneRmKg: 60 },
-    { percentile: 60, oneRmKg: 80 },
-    { percentile: 75, oneRmKg: 100 },
-    { percentile: 85, oneRmKg: 115 },
-    { percentile: 93, oneRmKg: 130 },
-    { percentile: 97, oneRmKg: 145 },
-    { percentile: 99, oneRmKg: 160 },
-  ],
-  "romanian deadlift": [
-    { percentile: 20, oneRmKg: 60 },
-    { percentile: 40, oneRmKg: 90 },
-    { percentile: 60, oneRmKg: 120 },
-    { percentile: 75, oneRmKg: 150 },
-    { percentile: 85, oneRmKg: 170 },
-    { percentile: 93, oneRmKg: 190 },
-    { percentile: 97, oneRmKg: 210 },
-    { percentile: 99, oneRmKg: 230 },
-  ],
-};
-
-
-const percentileSource = {
-  label: "Strength standard references",
-  note: "Approximate percentile anchors derived from public lifting-standard datasets (e.g. StrengthLevel-style aggregates) and linearly interpolated in-app.",
-  href: "https://strengthlevel.com/strength-standards",
-};
-
-const getPercentileLabel = (percentile: number) => {
-  if (percentile >= 99) return "Elite";
-  if (percentile >= 93) return "Advanced";
-  if (percentile >= 75) return "Intermediate";
-  if (percentile >= 40) return "Novice";
-  return "Starter";
-};
-const parseWorkoutText = (text: string): WorkoutSet[] => {
-  const lines = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  let currentDate = new Date().toISOString().slice(0, 10);
-
-  return lines.flatMap((line, index) => {
-    const dateMatch = line.match(
-      /(\d{4}[-\/]\d{1,2}[-\/]\d{1,2}|\d{1,2}[-\/]\d{1,2}[-\/]\d{2,4})/
-    );
-
-    if (dateMatch) {
-      currentDate = dateMatch[1].replace(/\//g, "-");
-      return [];
-    }
-
-    const patternA = line.match(
-      /^([a-zA-Z\s]+?)\s+(\d+)x(\d+)\s*@?\s*(\d+(?:\.\d+)?)\s*(kg|lb|lbs)?$/i
-    );
-    const patternB = line.match(
-      /^([a-zA-Z\s]+?)\s*[-:]\s*(\d+(?:\.\d+)?)\s*(kg|lb|lbs)?\s*x\s*(\d+)$/i
-    );
-
-    const match = patternA ?? patternB;
-
-    if (!match) {
-      return [];
-    }
-
-    const exercise = match[1].trim().toLowerCase();
-    const usesPatternA = Boolean(patternA);
-
-    const sets = usesPatternA ? Number(match[2]) : 1;
-    const reps = usesPatternA ? Number(match[3]) : Number(match[4]);
-    const weightRaw = usesPatternA ? Number(match[4]) : Number(match[2]);
-    const unit = (usesPatternA ? match[5] : match[3])?.toLowerCase() ?? "kg";
-
-    const weightKg = unit.startsWith("lb") ? weightRaw * 0.453592 : weightRaw;
-    const est1RM = weightKg * (1 + reps / 30);
-
-    return [
-      {
-        id: `${currentDate}-${exercise}-${index}`,
-        date: currentDate,
-        exercise,
-        weightKg,
-        reps,
-        sets,
-        est1RM,
-      },
-    ];
-  });
-};
-
-const prettifyExercise = (exercise: string) =>
-  exercise.replace(/\b\w/g, (letter) => letter.toUpperCase());
-
-const getStrengthReference = (exercise: string): PercentilePoint[] => {
-  const found = Object.entries(strengthPercentilesByExercise).find(([name]) =>
-    exercise.includes(name)
-  );
-
-  return (
-    found?.[1] ?? [
-      { percentile: 20, oneRmKg: 30 },
-      { percentile: 40, oneRmKg: 45 },
-      { percentile: 60, oneRmKg: 60 },
-      { percentile: 75, oneRmKg: 75 },
-      { percentile: 85, oneRmKg: 90 },
-      { percentile: 93, oneRmKg: 105 },
-      { percentile: 97, oneRmKg: 120 },
-      { percentile: 99, oneRmKg: 135 },
-    ]
-  );
-};
-
-const estimatePercentile = (oneRmKg: number, points: PercentilePoint[]) => {
-  const ordered = [...points].sort((a, b) => a.oneRmKg - b.oneRmKg);
-
-  if (oneRmKg <= ordered[0].oneRmKg) {
-    return ordered[0].percentile;
-  }
-
-  if (oneRmKg >= ordered[ordered.length - 1].oneRmKg) {
-    return ordered[ordered.length - 1].percentile;
-  }
-
-  for (let index = 0; index < ordered.length - 1; index += 1) {
-    const current = ordered[index];
-    const next = ordered[index + 1];
-
-    if (oneRmKg >= current.oneRmKg && oneRmKg <= next.oneRmKg) {
-      const span = next.oneRmKg - current.oneRmKg;
-      const ratio = span === 0 ? 0 : (oneRmKg - current.oneRmKg) / span;
-      return current.percentile + ratio * (next.percentile - current.percentile);
-    }
-  }
-
-  return 50;
-};
-
-const Home: NextPage = () => {
-  const [rawLog, setRawLog] = useState(defaultLog);
-  const [quickLog, setQuickLog] = useState<QuickLogForm>({
-    date: new Date().toISOString().slice(0, 10),
-    exercise: "",
-    weight: "",
-    reps: "5",
-    sets: "3",
-    unit: "kg",
-  });
+  const childrenQuery = useLiveQuery(() => db.children.toArray(), [])
+  const children = useMemo(() => childrenQuery ?? [], [childrenQuery])
+  const activeChild = children.find((c) => c.id === activeChildId) ?? children[0]
+  const cardsQuery = useLiveQuery(() => (activeChild ? db.cards.where('childId').equals(activeChild.id).toArray() : []), [activeChild?.id])
+  const cards = useMemo(() => cardsQuery ?? [], [cardsQuery])
 
   useEffect(() => {
-    const storedLog = window.localStorage.getItem(STORAGE_KEY);
-    if (storedLog) {
-      setRawLog(storedLog);
-    }
-  }, []);
+    ensureDemoData()
+  }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, rawLog);
-  }, [rawLog]);
+    if (!activeChildId && children[0]) setActiveChildId(children[0].id)
+  }, [children, activeChildId])
 
-  const parsedSets = useMemo(() => parseWorkoutText(rawLog), [rawLog]);
+  const sessionCards = useMemo(() => {
+    if (!activeChild) return []
+    return selectSessionCards(cards, {
+      length: activeChild.settings.sessionLength,
+      maxNewCards: activeChild.settings.maxNewCards,
+      maxDailyDue: activeChild.settings.maxDailyDue,
+      unlockedStage: activeChild.unlockedStage
+    })
+  }, [cards, activeChild])
 
-  const summaries = useMemo<ExerciseSummary[]>(() => {
-    const byExercise = parsedSets.reduce<Record<string, WorkoutSet[]>>((acc, set) => {
-      if (!acc[set.exercise]) acc[set.exercise] = [];
-      acc[set.exercise].push(set);
-      return acc;
-    }, {});
+  const currentCard = sessionCards[cardIndex]
 
-    return Object.entries(byExercise)
-      .map(([exercise, sets]) => {
-        const sorted = [...sets].sort((a, b) =>
-          `${a.date}-${a.id}`.localeCompare(`${b.date}-${b.id}`)
-        );
+  const runRating = async (rating: Rating) => {
+    if (!activeChild || !currentCard) return
+    const sourceCard = cards.find((c) => c.id === currentCard.id)
+    if (!sourceCard) return
+    const updated = applyRating(sourceCard, rating, Date.now(), activeChild.settings.intervals)
+    await db.cards.put({ ...sourceCard, ...updated })
+    setMascot(rating === 'fast' ? 'fast' : rating === 'slow' ? 'slow' : 'missed')
 
-        const first = sorted[0]?.est1RM ?? 0;
-        const latest = sorted[sorted.length - 1]?.est1RM ?? 0;
-        const reference = getStrengthReference(exercise);
-        const percentile = estimatePercentile(latest, reference);
-        const medianRef = reference.find((point) => point.percentile === 60)?.oneRmKg ?? 0;
-
-        return {
-          exercise,
-          firstEst1RM: first,
-          latestEst1RM: latest,
-          deltaKg: latest - first,
-          deltaPercent: first ? ((latest - first) / first) * 100 : 0,
-          percentile,
-          topPercent: 100 - percentile,
-          referenceMedian1RM: medianRef,
-          percentileLabel: getPercentileLabel(percentile),
-        };
-      })
-      .sort((a, b) => b.percentile - a.percentile);
-  }, [parsedSets]);
-
-  const onAddLogEntry = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const sets = Number(quickLog.sets);
-    const reps = Number(quickLog.reps);
-    const weight = Number(quickLog.weight);
-
-    if (!quickLog.exercise.trim() || !sets || !reps || !weight || !quickLog.date) {
-      return;
+    if (cardIndex >= sessionCards.length - 1) {
+      if (!celebrated) {
+        setCelebrated(true)
+        await db.children.update(activeChild.id, { stickers: activeChild.stickers + 1 })
+      }
+      setMode('dashboard')
+      setCardIndex(0)
+      return
     }
+    setCardIndex((i) => i + 1)
+    setFlipped(false)
+  }
 
-    const formattedLine = `${prettifyExercise(quickLog.exercise.trim())} ${sets}x${reps} @ ${weight}${quickLog.unit}`;
-    const block = `${quickLog.date}\n${formattedLine}`;
+  const saveReadiness = async (blendConfirmed: boolean) => {
+    if (!activeChild) return
+    const unlockedStage = computeUnlockedStage(cards, blendConfirmed)
+    await db.children.update(activeChild.id, { blendConfirmed, unlockedStage })
+  }
 
-    setRawLog((previous) => `${previous.trim()}\n\n${block}`.trim());
-    setQuickLog((previous) => ({
-      ...previous,
-      exercise: "",
-      weight: "",
-    }));
-  };
+  const addCustomCard = async () => {
+    if (!activeChild || !customPrompt.trim()) return
+    if (!canUseWholeWordCard(customStage as 0 | 1 | 2 | 3 | 4, customTricky)) {
+      alert('Whole-word cards are blocked in Stage 1/2 unless marked as tricky (Stage 4).')
+      return
+    }
+    await db.cards.add({
+      id: `${activeChild.id}-custom-${crypto.randomUUID()}`,
+      childId: activeChild.id,
+      stage: customStage as 0 | 1 | 2 | 3 | 4,
+      type: customType,
+      prompt: customPrompt,
+      answer: '',
+      tray: 'Frequent',
+      dueAt: Date.now(),
+      lapses: 0,
+      streak: 0,
+      isNew: true,
+      custom: true,
+      isTricky: customTricky
+    })
+    setCustomPrompt('')
+  }
+
+  const exportJson = async () => {
+    if (!activeChild) return
+    const payload = { child: activeChild, cards }
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${activeChild.name}-traylearn-export.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
-    <div className={styles.page}>
+    <>
       <Head>
-        <title>Strength Pulse</title>
-        <meta
-          name="description"
-          content="Phone-first strength tracker with progression and percentile benchmarks"
-        />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>TrayLearn</title>
       </Head>
+      <main className="mx-auto max-w-5xl p-4 md:p-8">
+        <h1 className="text-3xl font-bold">TrayLearn</h1>
+        <p className="mb-4 text-slate-600">Mastery-first UK phonics practice: short sessions, low pressure, no streak guilt.</p>
 
-      <main className={styles.appShell}>
-        <header className={styles.header}>
-          <p className={styles.kicker}>Phone-first strength tracker</p>
-          <h1>Strength Pulse</h1>
-          <p>
-            Log workouts here or paste chat history, then track progression and percentile rank by lift.
-          </p>
-        </header>
+        <section className="mb-4 rounded-xl bg-white p-4 shadow">
+          <h2 className="font-semibold">In 60 seconds</h2>
+          <p className="text-sm text-slate-600">Start with easy wins, review due cards, add at most two new cards, and always end on a win. Missed days are fine.</p>
+        </section>
 
-        <section className={styles.card}>
-          <h2>Quick log entry</h2>
-          <form className={styles.form} onSubmit={onAddLogEntry}>
-            <div className={styles.rowTwo}>
-              <label>
-                Date
-                <input
-                  type="date"
-                  value={quickLog.date}
-                  onChange={(event) =>
-                    setQuickLog((previous) => ({ ...previous, date: event.target.value }))
-                  }
-                  required
-                />
-              </label>
-              <label>
-                Exercise
-                <input
-                  type="text"
-                  placeholder="Squat"
-                  value={quickLog.exercise}
-                  onChange={(event) =>
-                    setQuickLog((previous) => ({ ...previous, exercise: event.target.value }))
-                  }
-                  required
-                />
-              </label>
-            </div>
-            <div className={styles.rowThree}>
-              <label>
-                Weight
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  value={quickLog.weight}
-                  onChange={(event) =>
-                    setQuickLog((previous) => ({ ...previous, weight: event.target.value }))
-                  }
-                  placeholder="100"
-                  required
-                />
-              </label>
-              <label>
-                Reps
-                <input
-                  type="number"
-                  value={quickLog.reps}
-                  onChange={(event) =>
-                    setQuickLog((previous) => ({ ...previous, reps: event.target.value }))
-                  }
-                  required
-                />
-              </label>
-              <label>
-                Sets
-                <input
-                  type="number"
-                  value={quickLog.sets}
-                  onChange={(event) =>
-                    setQuickLog((previous) => ({ ...previous, sets: event.target.value }))
-                  }
-                  required
-                />
-              </label>
-            </div>
-            <div className={styles.actions}>
-              <div className={styles.unitToggle} role="radiogroup" aria-label="Weight unit">
-                <button
-                  type="button"
-                  aria-pressed={quickLog.unit === "kg"}
-                  className={quickLog.unit === "kg" ? styles.unitActive : ""}
-                  onClick={() => setQuickLog((previous) => ({ ...previous, unit: "kg" }))}
-                >
-                  kg
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={quickLog.unit === "lb"}
-                  className={quickLog.unit === "lb" ? styles.unitActive : ""}
-                  onClick={() => setQuickLog((previous) => ({ ...previous, unit: "lb" }))}
-                >
-                  lb
-                </button>
-              </div>
-              <button className={styles.primaryButton} type="submit">
-                Add to log
+        <section className="mb-4 rounded-xl bg-white p-4 shadow">
+          <h2 className="font-semibold">Child Profiles</h2>
+          <div className="my-2 flex flex-wrap gap-2">
+            {children.map((child) => (
+              <button key={child.id} onClick={() => setActiveChildId(child.id)} className={`rounded-lg px-3 py-2 ${activeChild?.id === child.id ? 'bg-indigo-600 text-white' : 'bg-slate-100'}`}>
+                {child.name} ({child.age})
               </button>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <input className="rounded border p-2" placeholder="Name" value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <input className="w-20 rounded border p-2" type="number" value={newAge} onChange={(e) => setNewAge(Number(e.target.value))} />
+            <button className="rounded bg-slate-900 px-3 py-2 text-white" onClick={async () => newName && createChild(newName, newAge)}>Add child</button>
+          </div>
+        </section>
+
+        {activeChild && mode === 'dashboard' && (
+          <div className="space-y-4">
+            <section className="rounded-xl bg-white p-4 shadow">
+              <h2 className="font-semibold">Dashboard: {activeChild.name}</h2>
+              <p>Due cards today: {cards.filter((c) => c.dueAt <= Date.now()).length}</p>
+              <p>Unlocked: {stageNames[activeChild.unlockedStage]}</p>
+              <p>Sticker book: {activeChild.stickers} stickers ⭐</p>
+              <button className="mt-3 rounded bg-emerald-600 px-4 py-2 text-white" onClick={() => { setMode('session'); setCardIndex(0); setCelebrated(false); setMascot('idle') }}>
+                Start 5-minute session
+              </button>
+            </section>
+
+            <section className="rounded-xl bg-white p-4 shadow">
+              <h2 className="font-semibold">Readiness & stage gating</h2>
+              <label className="flex items-center gap-2">
+                <input type="checkbox" checked={activeChild.blendConfirmed} onChange={(e) => saveReadiness(e.target.checked)} />
+                Parent confirms child can blend c-a-t.
+              </label>
+              <p className="text-sm">Stage 1 mastery: {(strongMasteredRatio(cards, 1) * 100).toFixed(0)}% (need 80% + blend check).</p>
+              <p className="text-sm">Stage 2 mastery: {(strongMasteredRatio(cards, 2) * 100).toFixed(0)}% (need 70%).</p>
+              <p className="mt-2 text-xs text-slate-600">Tip: model consonants without adding “uh” (mmmm not muh).</p>
+            </section>
+
+            <section className="rounded-xl bg-white p-4 shadow">
+              <h2 className="font-semibold">Insights</h2>
+              <div className="grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+                {['Frequent', 'Growing', 'Strong', 'Mastered'].map((tray) => (
+                  <div key={tray} className="rounded bg-slate-100 p-2">{tray}: {cards.filter((c) => c.tray === tray).length}</div>
+                ))}
+              </div>
+              <p className="mt-2 text-xs">Archive suggestion appears when most cards are Mastered.</p>
+            </section>
+
+            <section className="rounded-xl bg-white p-4 shadow">
+              <h2 className="font-semibold">Custom card creator</h2>
+              <p className="text-xs text-slate-600">Stage 1/2 whole-word cards are blocked unless tricky (Stage 4 only).</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <input className="rounded border p-2" value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="Prompt" />
+                <select className="rounded border p-2" value={customStage} onChange={(e) => setCustomStage(Number(e.target.value))}>
+                  {[0,1,2,3,4].map((s)=><option key={s} value={s}>Stage {s}</option>)}
+                </select>
+                <select className="rounded border p-2" value={customType} onChange={(e) => setCustomType(e.target.value as CardType)}>
+                  {['PrePhonicsCard','SoundCard','DigraphCard','DecodableWordCard','TrickyWordCard'].map((t)=><option key={t}>{t}</option>)}
+                </select>
+                <label className="flex items-center gap-1 text-sm"><input type="checkbox" checked={customTricky} onChange={(e)=>setCustomTricky(e.target.checked)} />Mark tricky</label>
+                <button className="rounded bg-indigo-600 px-3 py-2 text-white" onClick={addCustomCard}>Add card</button>
+              </div>
+            </section>
+
+            <section className="rounded-xl bg-white p-4 shadow">
+              <h2 className="font-semibold">Settings & backup</h2>
+              <div className="flex flex-wrap gap-3 text-sm">
+                <label>Session length <input type="number" className="ml-1 w-16 rounded border p-1" value={activeChild.settings.sessionLength} onChange={(e)=>db.children.update(activeChild.id, { settings: { ...activeChild.settings, sessionLength: Number(e.target.value) } })} /></label>
+                <label>Max new <input type="number" className="ml-1 w-16 rounded border p-1" value={activeChild.settings.maxNewCards} onChange={(e)=>db.children.update(activeChild.id, { settings: { ...activeChild.settings, maxNewCards: Number(e.target.value) } })} /></label>
+                <label>Sound effects <input type="checkbox" className="ml-1" checked={activeChild.settings.soundsEnabled} onChange={(e)=>db.children.update(activeChild.id, { settings: { ...activeChild.settings, soundsEnabled: e.target.checked } })} /></label>
+                <button className="rounded bg-slate-800 px-3 py-1 text-white" onClick={exportJson}>Export JSON</button>
+                <button className="rounded border px-3 py-1" onClick={() => window.print()}>Printable deck</button>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {mode === 'session' && activeChild && currentCard && (
+          <section className="rounded-2xl bg-white p-6 shadow-lg">
+            <div className="mb-3 text-sm">Child mode • Card {cardIndex + 1}/{sessionCards.length} • End on a win enabled</div>
+            <div className="mb-2 h-2 w-full rounded bg-slate-200">
+              <div className="h-2 rounded bg-indigo-600" style={{ width: `${((cardIndex + 1) / sessionCards.length) * 100}%` }} />
             </div>
-          </form>
-        </section>
 
-        <section className={styles.card}>
-          <h2>Paste or edit raw log</h2>
-          <p className={styles.helpText}>
-            Supports <code>Squat 3x5 @ 100kg</code>, <code>Bench Press - 65kg x 8</code>, and <code>Deadlift: 265lb x 4</code>.
-          </p>
-          <textarea
-            value={rawLog}
-            onChange={(event) => setRawLog(event.target.value)}
-            className={styles.input}
-            aria-label="Workout log input"
-          />
-          <p className={styles.caption}>{parsedSets.length} sets parsed</p>
-        </section>
+            <div className="mb-4 rounded-xl bg-slate-100 p-8 text-center text-4xl font-bold" onClick={() => setFlipped((f) => !f)}>
+              {flipped ? currentCard.answer || currentCard.tip || 'Great try!' : currentCard.prompt}
+            </div>
 
-        <section className={styles.card}>
-          <h2>Progression</h2>
-          {summaries.length === 0 ? (
-            <p className={styles.empty}>No lift data parsed yet. Add a log entry to begin.</p>
-          ) : (
-            <ul className={styles.list}>
-              {summaries.map((summary) => (
-                <li key={summary.exercise} className={styles.listItem}>
-                  <div>
-                    <h3>{prettifyExercise(summary.exercise)}</h3>
-                    <p>
-                      Est. 1RM: <strong>{summary.latestEst1RM.toFixed(1)} kg</strong>
-                    </p>
-                  </div>
-                  <p className={summary.deltaKg >= 0 ? styles.up : styles.down}>
-                    {summary.deltaKg >= 0 ? "+" : ""}
-                    {summary.deltaKg.toFixed(1)} kg ({summary.deltaPercent.toFixed(1)}%)
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            <div className="mb-4 flex justify-center gap-2">
+              <button className="rounded bg-emerald-500 px-4 py-3 text-white" onClick={() => runRating('fast')}>Got it fast</button>
+              <button className="rounded bg-amber-500 px-4 py-3 text-white" onClick={() => runRating('slow')}>Got it slow</button>
+              <button className="rounded bg-rose-500 px-4 py-3 text-white" onClick={() => runRating('missed')}>Missed</button>
+            </div>
 
-        <section className={styles.card}>
-          <h2>Percentile ranking</h2>
-          <p className={styles.helpText}>
-            Percentiles are estimated from real-world lifting-standard style distributions, then interpolated.
-          </p>
-          <p className={styles.sourceNote}>
-            {percentileSource.note}{" "}
-            <a href={percentileSource.href} target="_blank" rel="noreferrer">
-              View source reference
-            </a>
-          </p>
-          {summaries.length === 0 ? (
-            <p className={styles.empty}>Add at least one lift to view rankings.</p>
-          ) : (
-            <ul className={styles.list}>
-              {summaries.map((summary) => (
-                <li key={`${summary.exercise}-percentile`} className={styles.listItem}>
-                  <div>
-                    <h3>{prettifyExercise(summary.exercise)}</h3>
-                    <p>Median benchmark (60th): {summary.referenceMedian1RM.toFixed(1)} kg est. 1RM</p>
-                  </div>
-                  <div className={styles.badgeWrap}>
-                    <p className={styles.badge}>Top {summary.topPercent.toFixed(1)}%</p>
-                    <p className={styles.tier}>{summary.percentileLabel}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            <div className="rounded-xl bg-indigo-50 p-3 text-center">
+              <div className="mx-auto mb-1 h-14 w-14 rounded-full bg-indigo-300" />
+              <p>{mascotMessage[mascot]}</p>
+              {celebrated && <p className="mt-1">🎊 Session sticker earned!</p>}
+            </div>
+          </section>
+        )}
       </main>
-    </div>
-  );
-};
-
-export default Home;
+    </>
+  )
+}
